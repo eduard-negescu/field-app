@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart' show rootBundle;
-// The contract has its own Route (an admin's list of stops); hide Flutter's.
-import 'package:flutter/widgets.dart' hide Route;
 
 import 'contract/contract.dart';
 
@@ -49,41 +47,4 @@ class Fixtures {
       [for (final j in await read('messages')) check(Message.fromJson(j), validateMessage)],
     );
   }
-}
-
-/// The one in-memory store: a ChangeNotifier the whole app listens to.
-class FieldStore extends ChangeNotifier {
-  FieldStore(this.fixtures) : _entrances = List.of(fixtures.entrances);
-
-  final Fixtures fixtures;
-  List<Entrance> _entrances;
-
-  List<Entrance> get entrances => _entrances;
-  Entrance? entrance(String id) =>
-      _entrances.where((e) => e.id == id).firstOrNull;
-
-  void submitSurvey(Entrance surveyed) {
-    final now = DateTime.now().toUtc().toIso8601String();
-    _entrances = [
-      for (final e in _entrances)
-        e.id == surveyed.id
-            ? surveyed.copyWith(
-                surveyStatus: SurveyStatus.submitted,
-                surveyedBy: fixtures.me,
-                surveyedAt: now,
-                updatedAt: now,
-              )
-            : e,
-    ];
-    notifyListeners();
-  }
-}
-
-/// Puts the store in the widget tree; widgets that read it rebuild on change.
-class StoreScope extends InheritedNotifier<FieldStore> {
-  const StoreScope({super.key, required FieldStore store, required super.child})
-      : super(notifier: store);
-
-  static FieldStore of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<StoreScope>()!.notifier!;
 }

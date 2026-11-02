@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../contract/contract.dart';
-import '../store.dart';
+import '../location.dart';
+import '../providers.dart';
 
-class SurveyScreen extends StatefulWidget {
+class SurveyScreen extends ConsumerStatefulWidget {
   const SurveyScreen({super.key, required this.id});
 
   final String id;
 
   @override
-  State<SurveyScreen> createState() => _SurveyScreenState();
+  ConsumerState<SurveyScreen> createState() => _SurveyScreenState();
 }
 
-class _SurveyScreenState extends State<SurveyScreen> {
+class _SurveyScreenState extends ConsumerState<SurveyScreen> {
   final _formKey = GlobalKey<FormState>();
   late final Entrance _entrance;
   late bool _coordsConfirmed, _addressConfirmed, _groundFloorCommercial;
@@ -84,7 +87,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
         surveyedAt: _entrance.surveyedAt,
       );
 
-  void _submit() {
+  Future<void> _submit() async {
     final fieldsOk = _formKey.currentState!.validate();
     final candidate = _candidate();
     // validateEntranceSurvey returns "field: message" strings.
@@ -94,8 +97,10 @@ class _SurveyScreenState extends State<SurveyScreen> {
     };
     setState(() => _ruleErrors = rules);
     if (!fieldsOk || rules.isNotEmpty) return;
-    StoreScope.of(context).submitSurvey(candidate);
-    context.pop();
+    await ref.read(databaseProvider).submitSurvey(candidate, ref.read(meProvider));
+    // Saved: say it with the hand as well as the eyes (nothing happens on the web).
+    await HapticFeedback.mediumImpact();
+    if (mounted) context.pop();
   }
 
   // A text field whose validator is the contract's.
@@ -120,7 +125,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
   @override
   Widget build(BuildContext context) {
     if (_text.isEmpty) {
-      final e = StoreScope.of(context).entrance(widget.id);
+      // The row comes from SQLite a moment after the first build: fill the
+      // form's controllers only once it is here.
+      final found = ref.watch(entranceProvider(widget.id));
+      if (found.isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      final e = found.value;
       if (e == null) return const Scaffold(body: Center(child: Text('No such entrance.')));
       _init(e);
     }
@@ -134,6 +143,9 @@ class _SurveyScreenState extends State<SurveyScreen> {
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
+          // Drag the list to put the keyboard away. The Scaffold already shrinks
+          // the body above the keyboard and scrolls the focused field into view.
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           children: [
             SwitchListTile(
               title: const Text('The pin is at the door'),
@@ -146,6 +158,18 @@ class _SurveyScreenState extends State<SurveyScreen> {
               gap,
               _field('correctedLng', 'Corrected longitude', _coordRule(validateLng), keyboard: decimal),
               if (_ruleErrors['correctedLng'] != null) _ruleError('correctedLng')!,
+              const SizedBox(height: 8),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: () async {
+                  final fix = await locate(context, ref);
+                  if (fix == null) return;
+                  // Five decimals is about a metre: more would be false precision.
+                  _text['correctedLat']!.text = fix.lat.toStringAsFixed(5);
+                  _text['correctedLng']!.text = fix.lng.toStringAsFixed(5);
+                },
+                child: const Text('Use my position'),
+              ),
               gap,
             ],
             _field('street', 'Street', validateStreet),

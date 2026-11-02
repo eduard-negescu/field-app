@@ -18,14 +18,31 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.fieldappexpo"
+      "package": "ro.rau.field_app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "The field app photographs the entrances you survey.",
+          "photosPermission": "The field app attaches photos from your gallery to a survey.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "The field app tags your photos and new pins with where you stand."
+        }
+      ],
+      "@maplibre/maplibre-react-native"
     ]
   }
 }

@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "ro.rau.field_app"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler 13 compiles against Android 17, API level 37.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

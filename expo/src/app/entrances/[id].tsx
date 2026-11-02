@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { HereCard } from '../../components/HereCard';
+import { Photos } from '../../components/Photos';
 import { StatusChip } from '../../components/StatusChip';
-import { buildings } from '../../contract/fixtures';
-import { useEntrance } from '../../store';
+import { useBuilding, useEntrance } from '../../store';
 import { useColors } from '../../theme';
 
 const show = (v: number | boolean | string | null) =>
@@ -11,11 +12,13 @@ const show = (v: number | boolean | string | null) =>
 export default function EntranceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const entrance = useEntrance(id);
+  // From SQLite, not the fixtures: a building made on the phone is there too.
+  const building = useBuilding(entrance?.buildingId ?? '');
   const colors = useColors();
+  if (entrance === undefined) return null; // SQLite has not answered yet
   if (!entrance) {
     return <Text style={{ color: colors.text, padding: 16 }}>No such entrance.</Text>;
   }
-  const building = buildings.find((b) => b.id === entrance.buildingId);
   const rows: [string, number | boolean | string | null][] = [
     ['Pin confirmed', entrance.coordsConfirmed],
     ['Address checked', entrance.addressConfirmed],
@@ -62,6 +65,8 @@ export default function EntranceScreen() {
       >
         <Text style={{ color: colors.onPrimary, fontWeight: '700' }}>Survey</Text>
       </Pressable>
+      <HereCard />
+      <Photos entranceId={entrance.id} />
     </ScrollView>
   );
 }
