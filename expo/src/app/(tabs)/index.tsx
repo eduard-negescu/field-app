@@ -1,12 +1,15 @@
 import * as Haptics from 'expo-haptics';
 import { Redirect, router } from 'expo-router';
 import { useNetworkState } from 'expo-network';
+import { signOut } from 'firebase/auth';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EntranceMap } from '../../components/EntranceMap';
+import { SyncBar } from '../../components/SyncBar';
+import { auth } from '../../firebase';
 import { locate } from '../../location';
-import { lastTab, useToken } from '../../session';
+import { lastTab } from '../../session';
 import { addMissedEntrance, useEntrances } from '../../store';
 import { useColors } from '../../theme';
 
@@ -20,7 +23,6 @@ export default function MapScreen() {
   const done = entrances.filter((e) => e.surveyStatus !== 'not_started').length;
   const [busy, setBusy] = useState(false);
   const network = useNetworkState();
-  const token = useToken();
   // isInternetReachable is null until the phone has checked; then true or false.
   const online = network.isConnected !== false && network.isInternetReachable !== false;
 
@@ -63,10 +65,12 @@ export default function MapScreen() {
               {online ? `Online · ${network.type ?? '…'}` : 'Offline — saved on the phone'}
             </Text>
           </View>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>
-            token {token ? `••••${token.slice(-4)}` : '…'}
-          </Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>{auth.currentUser?.email}</Text>
+          <Pressable accessibilityRole="button" onPress={() => signOut(auth)}>
+            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Sign out</Text>
+          </Pressable>
         </View>
+        <SyncBar />
       </View>
       <Pressable
         accessibilityRole="button"

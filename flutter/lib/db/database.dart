@@ -97,22 +97,90 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration =>
       MigrationStrategy(onCreate: (m) => m.createAll());
 
-  /// First launch only: copy the office's fixtures into the empty tables.
-  /// A contract object and a row share their field names, so JSON carries one
-  /// into the other; the local-only columns are added on the way.
-  Future<void> seedIfEmpty(List<Building> fromOffice, List<Entrance> entrancesFromOffice) async {
-    final n = await entrances.count().getSingle();
+  /// First launch only: copy the office's buildings into the empty table.
+  /// The entrances no longer come from the fixtures: since week 4 they are the
+  /// pins the cloud assigns to the signed-in worker (sync.dart). A contract
+  /// object and a row share their field names, so JSON carries one into the
+  /// other; the local-only columns are added on the way.
+  Future<void> seedIfEmpty(List<Building> fromOffice) async {
+    final n = await buildings.count().getSingle();
     if (n > 0) return;
     const synced = {'syncState': 'synced', 'lastError': null}; // the office has them
     await batch((b) {
       b.insertAll(buildings, [
         for (final x in fromOffice) BuildingRow.fromJson({...x.toJson(), ...synced}),
       ]);
-      b.insertAll(entrances, [
-        for (final x in entrancesFromOffice) EntranceRow.fromJson({...x.toJson(), ...synced}),
-      ]);
     });
   }
+
+  /// The pull: the cloud's list of my pins becomes the entrances table. A pin
+  /// updates its row only when it is newer (updatedAt) than the row, and never
+  /// over an unsent survey (syncState pending or failed): the survey the worker
+  /// just sent is newer than the office's pin, so it stays on screen. A synced
+  /// row that is no longer in the list was taken away: deleted.
+  Future<void> savePins(List<Entrance> pins) => transaction(() async {
+        for (final pin in pins) {
+          final row = EntranceRow.fromJson({...pin.toJson(), 'syncState': 'synced', 'lastError': null})
+              .toCompanion(false);
+          await into(entrances).insert(
+            row,
+            onConflict: DoUpdate(
+              (_) => row,
+              where: (old) =>
+                  old.syncState.equalsValue(SyncState.synced) &
+                  old.updatedAt.isSmallerThanValue(pin.updatedAt),
+            ),
+          );
+        }
+        await (delete(entrances)
+              ..where((e) =>
+                  e.syncState.equalsValue(SyncState.synced) &
+                  e.id.isNotIn([for (final p in pins) p.id])))
+            .go();
+      });
+
+  /// The outbox: submitted surveys the cloud has not confirmed yet. A missed
+  /// building (week 3) waits: its building is not in the cloud before week 5.
+  Future<List<Entrance>> outbox() async {
+    final q = select(entrances).join([
+      innerJoin(buildings, buildings.id.equalsExp(entrances.buildingId)),
+    ])
+      ..where(entrances.surveyStatus.equalsValue(SurveyStatus.submitted) &
+          entrances.syncState.isInValues([SyncState.pending, SyncState.failed]) &
+          buildings.syncState.equalsValue(SyncState.synced));
+    return [for (final r in await q.get()) Entrance.fromJson(r.readTable(entrances).toJson())];
+  }
+
+  /// After a push: synced, unless the worker changed the survey meanwhile.
+  Future<void> markSent(String id, String updatedAt, String? error) =>
+      (update(entrances)..where((e) => e.id.equals(id) & e.updatedAt.equals(updatedAt))).write(
+        EntrancesCompanion(
+          syncState: Value(error == null ? SyncState.synced : SyncState.failed),
+          lastError: Value(error),
+        ),
+      );
+
+  /// The banner's count: what still waits to be sent, and the last refusal.
+  Stream<({int pending, int failed, String? lastError})> watchOutbox() =>
+      (select(entrances)
+            ..where((e) => e.syncState.isInValues([SyncState.pending, SyncState.failed])))
+          .watch()
+          .map((rows) => (
+                pending: rows.where((r) => r.syncState == SyncState.pending).length,
+                failed: rows.where((r) => r.syncState == SyncState.failed).length,
+                lastError: rows.map((r) => r.lastError).nonNulls.firstOrNull,
+              ));
+
+  /// Step 11: the photos not uploaded yet, and what became of each.
+  Future<List<PhotoRow>> photosToUpload() =>
+      (select(photos)..where((p) => p.uploadState.isInValues([UploadState.pending, UploadState.failed]))).get();
+
+  Future<void> markPhoto(String id, {String? remoteUrl, String? error}) =>
+      (update(photos)..where((p) => p.id.equals(id))).write(PhotosCompanion(
+        uploadState: Value(error == null ? UploadState.uploaded : UploadState.failed),
+        remoteUrl: Value(remoteUrl),
+        lastError: Value(error),
+      ));
 
   // ---- Reads: streams that emit again whenever a table they read changes ----
 

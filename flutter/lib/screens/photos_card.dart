@@ -88,6 +88,7 @@ class _PhotosCardState extends ConsumerState<PhotosCard> {
                       : '${p.lat!.toStringAsFixed(5)}, ${p.lng!.toStringAsFixed(5)}',
                   if (p.heading case final h?) 'facing ${h.round()}° ${compassPoint(h)}',
                   p.fileName,
+                  'upload: ${p.uploadState.name}${p.lastError == null ? '' : ' (${p.lastError})'}',
                 ].join(' · ')),
               ),
           ],

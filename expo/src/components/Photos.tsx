@@ -59,6 +59,10 @@ export function Photos({ entranceId }: { entranceId: string }) {
             <Text style={{ color: colors.muted }} numberOfLines={1}>
               {p.fileName}
             </Text>
+            <Text style={{ color: colors.muted }}>
+              upload: {p.uploadState}
+              {p.lastError ? ` (${p.lastError})` : ''}
+            </Text>
           </View>
         </View>
       ))}

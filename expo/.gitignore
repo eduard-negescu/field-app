@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Your Firebase project's config (step 3): yours, never committed
+.env
